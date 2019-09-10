@@ -628,7 +628,7 @@ void QuantileHistMaker::Builder::SyncHistograms(
       common::GradStatHist::GradType* hist_data =
           reinterpret_cast<common::GradStatHist::GradType*>(hist_[nid].data());
 
-      ReduceHistograms(hist_data, nullptr, nullptr, cut_ptr[fid] * 2,  cut_ptr[fid+ 1 ] * 2, node,
+      ReduceHistograms(hist_data, nullptr, nullptr, cut_ptr[fid] * 2,  cut_ptr[fid + 1] * 2, node,
           *hist_is_init, *hist_buffers);
     }
 
@@ -1108,10 +1108,13 @@ void QuantileHistMaker::Builder::EvaluateSplitsBatch(
     }
   }
 
-  // rabit::IsDistributed is not thread-safe
-  auto isDistributed = rabit::IsDistributed();
   // partial results
   std::vector<std::pair<SplitEntry, SplitEntry>> splits(tasks.size());
+
+  // result of rabit::IsDistributed() inside parallel loop is false always
+  // so compute it once before parallel loop
+  const bool isDistr = rabit::IsDistributed();
+
   // parallel enumeration
   #pragma omp parallel for schedule(static)
   for (omp_ulong i = 0; i < tasks.size(); ++i) {
@@ -1122,16 +1125,16 @@ void QuantileHistMaker::Builder::EvaluateSplitsBatch(
     const int32_t  sibling_nid = nodes[node_idx].sibling_nid;
     const int32_t  parent_nid  = nodes[node_idx].parent_nid;
 
-    // reduce needed part of a hist here to have it in cache before enumeration
-    if (!isDistributed) {
-      auto hist_data = reinterpret_cast<common::GradStatHist::GradType *>(hist_[nid].data());
-      auto sibling_hist_data = sibling_nid > -1 ?
-                               reinterpret_cast<common::GradStatHist::GradType *>(
-                                   hist_[sibling_nid].data()) : nullptr;
-      auto parent_hist_data = sibling_nid > -1 ?
-                              reinterpret_cast<common::GradStatHist::GradType *>(
-                                  hist_[parent_nid].data()) : nullptr;
+    common::GradStatHist::GradType* hist_data =
+        reinterpret_cast<common::GradStatHist::GradType*>(hist_[nid].data());
+    common::GradStatHist::GradType* sibling_hist_data = sibling_nid > -1 ?
+        reinterpret_cast<common::GradStatHist::GradType*>(
+          hist_[sibling_nid].data()) : nullptr;
+    common::GradStatHist::GradType* parent_hist_data  = sibling_nid > -1 ?
+        reinterpret_cast<common::GradStatHist::GradType*>(hist_[parent_nid].data()) : nullptr;
 
+    // reduce needed part of a hist here to have it in cache before enumeration
+    if (!isDistr) {
       const std::vector<uint32_t>& cut_ptr = gmat.cut.Ptrs();
       const size_t ibegin = 2 * cut_ptr[fid];
       const size_t iend = 2 * cut_ptr[fid + 1];
