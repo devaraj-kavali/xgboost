@@ -132,11 +132,14 @@ object DataUtils extends Serializable {
       }
     } else {
       arrayOfRDDs.map(rdd => {
+        /*
         if (rdd.getNumPartitions != numWorkers) {
           rdd.map(_._2).repartition(numWorkers)
         } else {
           rdd.map(_._2)
         }
+        */
+        rdd.map(_._2)
       })
     }
   }

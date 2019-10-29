@@ -271,6 +271,7 @@ object XGBoost extends Serializable {
   private[spark] def processMissingValues(
       xgbLabelPoints: Iterator[XGBLabeledPoint],
       missing: Float): Iterator[XGBLabeledPoint] = {
+    /*
     if (!missing.isNaN) {
       removeMissingValues(verifyMissingSetting(xgbLabelPoints, missing),
         missing, (v: Float) => v != missing)
@@ -278,6 +279,8 @@ object XGBoost extends Serializable {
       removeMissingValues(verifyMissingSetting(xgbLabelPoints, missing),
         missing, (v: Float) => !v.isNaN)
     }
+    */
+    xgbLabelPoints
   }
 
   private def processMissingValuesWithGroup(

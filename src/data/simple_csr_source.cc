@@ -6,6 +6,7 @@
 #include <xgboost/logging.h>
 #include <xgboost/json.h>
 
+#include <chrono>
 #include <limits>
 #include "simple_csr_source.h"
 #include "columnar.h"
@@ -35,6 +36,7 @@ void SimpleCSRSource::CopyFrom(dmlc::Parser<uint32_t>* parser) {
   this->Clear();
   while (parser->Next()) {
     const dmlc::RowBlock<uint32_t>& batch = parser->Value();
+    auto t0 = std::chrono::system_clock::now();
     if (batch.label != nullptr) {
       auto& labels = info.labels_.HostVector();
       labels.insert(labels.end(), batch.label, batch.label + batch.size);
@@ -78,6 +80,12 @@ void SimpleCSRSource::CopyFrom(dmlc::Parser<uint32_t>* parser) {
     for (size_t i = 0; i < batch.size; ++i) {
       offset_vec.push_back(offset_vec[top - 1] + batch.offset[i + 1] - batch.offset[0]);
     }
+    auto t1 = std::chrono::system_clock::now();
+    std::chrono::duration<double> delta = t1 - t0;
+    elapsed += delta.count();
+  }
+  if (elapsed > 0.0f) {
+    std::cout << "===ZZZ=== Copying to C++ DMatrix: " << elapsed << " seconds.\n";
   }
   if (last_group_id != default_max) {
     if (group_size > info.group_ptr_.back()) {

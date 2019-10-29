@@ -40,6 +40,8 @@ class DataBatch {
   static class BatchIterator implements Iterator<DataBatch> {
     private final Iterator<LabeledPoint> base;
     private final int batchSize;
+    long timer0 = 0;
+    long timer1 = 0;
 
     BatchIterator(Iterator<LabeledPoint> base, int batchSize) {
       this.base = base;
@@ -54,6 +56,7 @@ class DataBatch {
     @Override
     public DataBatch next() {
       try {
+        long t0 = System.nanoTime();
         int numRows = 0;
         int numElem = 0;
         List<LabeledPoint> batch = new ArrayList<>(batchSize);
@@ -63,7 +66,9 @@ class DataBatch {
           numElem += labeledPoint.values().length;
           numRows++;
         }
+        timer0 += (System.nanoTime() - t0);
 
+        long t1 = System.nanoTime();
         long[] rowOffset = new long[numRows + 1];
         float[] label = new float[numRows];
         int[] featureIndex = new int[numElem];
@@ -89,6 +94,7 @@ class DataBatch {
                   labeledPoint.values().length);
           offset += labeledPoint.values().length;
         }
+        timer1 += (System.nanoTime() - t1);
 
         rowOffset[batch.size()] = offset;
         return new DataBatch(rowOffset, weight, label, featureIndex, featureValue);

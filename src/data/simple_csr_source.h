@@ -77,6 +77,8 @@ class SimpleCSRSource : public DataSource<SparsePage> {
   /*! \brief magic number used to identify SimpleCSRSource */
   static const int kMagic = 0xffffab01;
 
+  double elapsed = 0;
+
  private:
   /*!
    * \brief copy content of data from foreign GPU columnar buffer.
