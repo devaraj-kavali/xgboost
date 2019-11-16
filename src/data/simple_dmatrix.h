@@ -34,6 +34,11 @@ class SimpleDMatrix : public DMatrix {
 
   bool SingleColBlock() const override;
 
+  void AddFrom(dmlc::Parser<uint32_t>* parser) { 
+    auto cast = dynamic_cast<SimpleCSRSource*>(source_.get());
+    cast->AddFrom(parser);
+  }
+
  private:
   BatchSet<SparsePage> GetRowBatches() override;
   BatchSet<CSCPage> GetColumnBatches() override;

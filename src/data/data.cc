@@ -150,6 +150,9 @@ void MetaInfo::SetInfo(const char * c_key, std::string const& interface_str) {
 }
 #endif  // !defined(XGBOOST_USE_CUDA)
 
+// define class SDM
+DMatrix* DMatrix::bigDMat_ = nullptr;
+
 DMatrix* DMatrix::Load(const std::string& uri,
                        bool silent,
                        bool load_row_split,
@@ -271,6 +274,24 @@ DMatrix* DMatrix::Create(dmlc::Parser<uint32_t>* parser,
     LOG(FATAL) << "External memory is not enabled in mingw";
     return nullptr;
 #endif  // DMLC_ENABLE_STD_THREAD
+  }
+}
+
+DMatrix* DMatrix::CreateOrMerge(dmlc::Parser<uint32_t>* parser,
+                                const size_t page_size) {
+  if (!bigDMat_) {
+    std::unique_ptr<data::SimpleCSRSource> source(new data::SimpleCSRSource());
+    source->CopyFrom(parser);
+    bigDMat_ =  DMatrix::Create(std::move(source));
+    return bigDMat_;
+  } else {
+      data::SimpleDMatrix* psdm = dynamic_cast<data::SimpleDMatrix*>(bigDMat_);
+    if (!psdm) {
+      LOG(FATAL) << "Runtime error";
+    } else {
+      psdm->AddFrom(parser);
+    }
+    return nullptr;
   }
 }
 

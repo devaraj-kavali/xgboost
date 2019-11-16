@@ -16,18 +16,19 @@
 
 package ml.dmlc.xgboost4j.scala.example.spark
 
+import ml.dmlc.xgboost4j.{LabeledPoint => XGBLabeledPoint}
+import ml.dmlc.xgboost4j.scala.DataSource
 import ml.dmlc.xgboost4j.scala.DMatrix
 import ml.dmlc.xgboost4j.scala.spark.XGBoostClassifier
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.ml.linalg.{DenseVector, SparseVector, Vector, Vectors}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.{Column, DataFrame, Row}
 import org.apache.spark.sql.functions.col
 import org.apache.spark.sql.types.{FloatType, IntegerType}
-import org.apache.spark.sql.{SparkSession, SQLContext}
+import org.apache.spark.sql.SparkSession
 import org.apache.commons.logging.LogFactory
 
 object MortgageTraining {
@@ -58,6 +59,32 @@ object MortgageTraining {
     })
   }
 
+  def convertDFToDMatrixRDD(dataFrame: DataFrame, nPartitions: Int): RDD[DMatrix] = {
+    val df = dataFrame.coalesce(nPartitions)
+    val selectedColumns = Seq(col("delinquency_12").cast(FloatType), col("features"))
+    val xgblpRDD = df.select(selectedColumns: _*).rdd.map {
+      case Row(label: Float, features: Vector) =>
+        val values = features.toDense.values.map(_.toFloat)
+        XGBLabeledPoint(label, null, values, 1.0f, baseMargin = Float.NaN)
+    }
+    xgblpRDD.mapPartitions {
+      pts => Iterator(new DMatrix(pts, null))
+    }.cache()
+  }
+
+  def convertDFToDataSourceRDD(dataFrame: DataFrame, nPartitions: Int): RDD[DataSource] = {
+    val df = dataFrame.coalesce(nPartitions)
+    val selectedColumns = Seq(col("delinquency_12").cast(FloatType), col("features"))
+    val xgblpRDD = df.select(selectedColumns: _*).rdd.map {
+      case Row(label: Float, features: Vector) =>
+        val values = features.toDense.values.map(_.toFloat)
+        XGBLabeledPoint(label, null, values, 1.0f, baseMargin = Float.NaN)
+    }
+    xgblpRDD.mapPartitions {
+      pts => Iterator(new DataSource(pts))
+    }.cache()
+  }
+
   def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       // scalastyle:off
@@ -66,10 +93,11 @@ object MortgageTraining {
     }
 
     val inputPath = args(0)
-    val sc = new SparkContext(new SparkConf())
-    val spark = new SQLContext(sc)
+    val spark = SparkSession.builder().getOrCreate()
+    val sc = spark.sparkContext
 
     val nExecutors = sc.getConf.get("spark.executor.instances").toInt
+    val nExecutorCores = sc.getConf.get("spark.executor.cores").toInt
     val nTaskCpus = sc.getConf.get("spark.task.cpus").toInt
     sc.setLogLevel("ERROR")
 
@@ -88,18 +116,23 @@ object MortgageTraining {
       "tree_method" -> "hist",
       "objective" -> "reg:squarederror",
       "gorw_policy" -> "lossguide",
-      "num_workers" -> nExecutors,
+      "num_workers" -> nExecutors*nExecutorCores,
       "nthread" -> nTaskCpus)
     val df = spark.read.format("parquet").load(inputPath)
 
     val t0 = System.nanoTime
-    //val xgbClassifier = new XGBoostClassifier(xgbParam)
-    //val xgbClassificationModel = xgbClassifier.fit(xgbInput)
-    val tables =  convertDFToArraysRDD(df, nExecutors).cache()
-    println(tables.count)
+    // val xgbClassifier = new XGBoostClassifier(xgbParam)
+    // val xgbClassificationModel = xgbClassifier.fit(xgbInput)
+    val tables = convertDFToDMatrixRDD(df, nExecutors*nExecutorCores)
+    val merged = tables
+      // .coalesce(nExecutors)
+      .mapPartitions(matrices => {
+        matrices.map(_.rowNum)
+      })
+    val totalRowNum = merged.reduce { (x, y) => x + y }
+    println(s"total number of rows = $totalRowNum")
     val elapsed = (System.nanoTime - t0) / 1e9d
 
-    spark.clearCache()
     sc.stop()
     println("Total elapsed time (seconds) = " + elapsed)
   }

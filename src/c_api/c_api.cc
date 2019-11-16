@@ -15,7 +15,6 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <chrono>
 
 #include "c_api_error.h"
 #include "../data/simple_csr_source.h"
@@ -34,7 +33,7 @@ class NativeDataIter : public dmlc::Parser<uint32_t> {
  public:
   NativeDataIter(DataIterHandle data_handle,
                  XGBCallbackDataIterNext* next_callback)
-      :  elapsed(0), at_first_(true), bytes_read_(0),
+      :  at_first_(true), bytes_read_(0),
          data_handle_(data_handle), next_callback_(next_callback) {
   }
 
@@ -64,7 +63,6 @@ class NativeDataIter : public dmlc::Parser<uint32_t> {
 
   // callback to set the data
   void SetData(const XGBoostBatchCSR& batch) {
-    auto t0 = std::chrono::system_clock::now();
     offset_.clear();
     label_.clear();
     weight_.clear();
@@ -102,12 +100,7 @@ class NativeDataIter : public dmlc::Parser<uint32_t> {
         weight_.size() * sizeof(dmlc::real_t) +
         index_.size() * sizeof(uint32_t) +
         value_.size() * sizeof(dmlc::real_t);
-    auto t1 = std::chrono::system_clock::now();
-    std::chrono::duration<double> delta = t1 - t0;
-    elapsed += delta.count();
   }
-
-  double elapsed;
 
  private:
   // at the beinning.
@@ -180,6 +173,17 @@ int XGDMatrixCreateFromFile(const char *fname,
   API_END();
 }
 
+int XGDMatrixCreateByMergingDataIters(
+    void* data_handle,
+    XGBCallbackDataIterNext* callback,
+    DMatrixHandle *out) {
+  API_BEGIN();
+
+  NativeDataIter parser(data_handle, callback);
+  *out = new std::shared_ptr<DMatrix>(DMatrix::CreateOrMerge(&parser));
+  API_END();
+}
+
 int XGDMatrixCreateFromDataIter(
     void* data_handle,
     XGBCallbackDataIterNext* callback,
@@ -193,9 +197,6 @@ int XGDMatrixCreateFromDataIter(
   }
   NativeDataIter parser(data_handle, callback);
   *out = new std::shared_ptr<DMatrix>(DMatrix::Create(&parser, scache));
-  if (parser.elapsed > 0.0f) {
-    std::cout << "===ZZZ=== Copying to C++ batches: " << parser.elapsed << " seconds.\n";
-  }
   API_END();
 }
 

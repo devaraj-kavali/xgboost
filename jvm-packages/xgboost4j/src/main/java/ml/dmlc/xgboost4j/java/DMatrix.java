@@ -51,18 +51,9 @@ public class DMatrix {
     int batchSize = 32 << 12;
     Iterator<DataBatch> batchIter = new DataBatch.BatchIterator(iter, batchSize);
     long[] out = new long[1];
-    XGBoostJNI.checkCall(XGBoostJNI.XGDMatrixCreateFromDataIter(batchIter, cacheInfo, out));
+    // XGBoostJNI.checkCall(XGBoostJNI.XGDMatrixCreateFromDataIter(batchIter, cacheInfo, out));
+    XGBoostJNI.checkCall(XGBoostJNI.XGDMatrixCreateByMergingDataIters(batchIter, out));
     handle = out[0];
-
-    DataBatch.BatchIterator it = (DataBatch.BatchIterator) batchIter;
-    if (it.timer0 > 1e6d) {
-      System.out.print("===ZZZ=== Copying into ArrayList[LabeledPoint]: " +
-              String.valueOf(it.timer0/1e9d) + " seconds\n");
-    }
-    if (it.timer1 > 1e6d) {
-      System.out.print("===ZZZ=== Copying into float[] arrays: " +
-              String.valueOf(it.timer1/1e9d) + " seconds\n");
-    }
   }
 
   /**

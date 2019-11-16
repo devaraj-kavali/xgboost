@@ -51,6 +51,11 @@ class SimpleCSRSource : public DataSource<SparsePage> {
    */
   void CopyFrom(dmlc::Parser<uint32_t>* src);
   /*!
+   * \brief add content of data from parser.
+   * \param src source data iter.
+   */
+  void AddFrom(dmlc::Parser<uint32_t>* src);
+  /*!
    * \brief copy content of data from foreign **GPU** columnar buffer.
    * \param interfaces_str JSON representation of cuda array interfaces.
    * \param has_missing Whether did users supply their own missing value.
@@ -77,8 +82,6 @@ class SimpleCSRSource : public DataSource<SparsePage> {
   /*! \brief magic number used to identify SimpleCSRSource */
   static const int kMagic = 0xffffab01;
 
-  double elapsed = 0;
-
  private:
   /*!
    * \brief copy content of data from foreign GPU columnar buffer.
@@ -88,6 +91,13 @@ class SimpleCSRSource : public DataSource<SparsePage> {
   void FromDeviceColumnar(std::vector<Json> const& columns,
                           bool has_missing = false,
                           float missing = std::numeric_limits<float>::quiet_NaN());
+
+  /*!
+   * \brief to support CopyFrom and AddFrom
+   * \param parser source data iter
+   */
+  void CopyFrom_(dmlc::Parser<uint32_t>* parser);
+  
   /*! \brief internal variable, used to support iterator interface */
   bool at_first_{true};
 };
