@@ -34,7 +34,7 @@ class SimpleDMatrix : public DMatrix {
 
   bool SingleColBlock() const override;
 
-  void AddFrom(dmlc::Parser<uint32_t>* parser) { 
+  void AddDataFromParser(dmlc::Parser<uint32_t>* parser) { 
     auto cast = dynamic_cast<SimpleCSRSource*>(source_.get());
     cast->AddFrom(parser);
   }

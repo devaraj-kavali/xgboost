@@ -129,7 +129,18 @@ private[this] class XGBoostExecutionParamsFactory(rawParams: Map[String, Any], s
       params: Map[String, Any],
       sc: SparkContext): Map[String, Any] = {
     val coresPerTask = sc.getConf.getInt("spark.task.cpus", 1)
+    require(coresPerTask == 1, "spark.task.cpus must be set to 1")
+    val coresPerExecutor = sc.getConf.getInt("spark.executor.cores", 1)
     var overridedParams = params
+    if (overridedParams.contains("nthread")) {
+      val nThread = overridedParams("nthread").toString.toInt
+      require(nThread == coresPerExecutor,
+        s"the nthread configuration ($nThread) must be equal to " +
+          s"spark.executor.cores ($coresPerExecutor)")
+    } else {
+      overridedParams = overridedParams + ("nthread" -> coresPerExecutor)
+    }
+    /*
     if (overridedParams.contains("nthread")) {
       val nThread = overridedParams("nthread").toString.toInt
       require(nThread <= coresPerTask,
@@ -138,6 +149,7 @@ private[this] class XGBoostExecutionParamsFactory(rawParams: Map[String, Any], s
     } else {
       overridedParams = overridedParams + ("nthread" -> coresPerTask)
     }
+    */
 
     val numEarlyStoppingRounds = overridedParams.getOrElse(
       "num_early_stopping_rounds", 0).asInstanceOf[Int]
@@ -312,35 +324,38 @@ object XGBoost extends Serializable {
       round: Int,
       obj: ObjectiveTrait,
       eval: EvalTrait,
-      prevBooster: Booster): Iterator[(Booster, Map[String, Array[Float]])] = {
+      prevBooster: Booster): Iterator[Option[(Booster, Map[String, Array[Float]])]] = {
+    if (watches.toMap.contains("train")) {
+      // to workaround the empty partitions in training dataset,
+      // this might not be the best efficient implementation, see
+      // (https://github.com/dmlc/xgboost/issues/1277)
+      if (watches.toMap("train").rowNum == 0) {
+        throw new XGBoostError(
+          s"detected an empty partition in the training data, partition ID:" +
+            s" ${TaskContext.getPartitionId()}")
+      }
+      val taskId = TaskContext.getPartitionId().toString
+      rabitEnv.put("DMLC_TASK_ID", taskId)
+      rabitEnv.put("DMLC_WORKER_STOP_PROCESS_ON_ERROR", "false")
 
-    // to workaround the empty partitions in training dataset,
-    // this might not be the best efficient implementation, see
-    // (https://github.com/dmlc/xgboost/issues/1277)
-    if (watches.toMap("train").rowNum == 0) {
-      throw new XGBoostError(
-        s"detected an empty partition in the training data, partition ID:" +
-          s" ${TaskContext.getPartitionId()}")
-    }
-    val taskId = TaskContext.getPartitionId().toString
-    rabitEnv.put("DMLC_TASK_ID", taskId)
-    rabitEnv.put("DMLC_WORKER_STOP_PROCESS_ON_ERROR", "false")
-
-    try {
-      Rabit.init(rabitEnv)
-      val numEarlyStoppingRounds = xgbExecutionParam.earlyStoppingParams.numEarlyStoppingRounds
-      val metrics = Array.tabulate(watches.size)(_ => Array.ofDim[Float](round))
-      val booster = SXGBoost.train(watches.toMap("train"), xgbExecutionParam.toMap, round,
-        watches.toMap, metrics, obj, eval,
-        earlyStoppingRound = numEarlyStoppingRounds, prevBooster)
-      Iterator(booster -> watches.toMap.keys.zip(metrics).toMap)
-    } catch {
-      case xgbException: XGBoostError =>
-        logger.error(s"XGBooster worker $taskId has failed due to ", xgbException)
-        throw xgbException
-    } finally {
-      Rabit.shutdown()
-      watches.delete()
+      try {
+        Rabit.init(rabitEnv)
+        val numEarlyStoppingRounds = xgbExecutionParam.earlyStoppingParams.numEarlyStoppingRounds
+        val metrics = Array.tabulate(watches.size)(_ => Array.ofDim[Float](round))
+        val booster = SXGBoost.train(watches.toMap("train"), xgbExecutionParam.toMap, round,
+          watches.toMap, metrics, obj, eval,
+          earlyStoppingRound = numEarlyStoppingRounds, prevBooster)
+        Iterator(Some(booster -> watches.toMap.keys.zip(metrics).toMap))
+      } catch {
+        case xgbException: XGBoostError =>
+          logger.error(s"XGBooster worker $taskId has failed due to ", xgbException)
+          throw xgbException
+      } finally {
+        Rabit.shutdown()
+        watches.delete()
+      }
+    } else {
+      Iterator(None)
     }
   }
 
@@ -407,7 +422,8 @@ object XGBoost extends Serializable {
       rabitEnv: java.util.Map[String, String],
       checkpointRound: Int,
       prevBooster: Booster,
-      evalSetsMap: Map[String, RDD[XGBLabeledPoint]]): RDD[(Booster, Map[String, Array[Float]])] = {
+      evalSetsMap: Map[String, RDD[XGBLabeledPoint]]):
+          RDD[Option[(Booster, Map[String, Array[Float]])]] = {
     if (evalSetsMap.isEmpty) {
       trainingData.mapPartitions(labeledPoints => {
         val watches = Watches.buildWatches(xgbExecutionParams,
@@ -438,7 +454,8 @@ object XGBoost extends Serializable {
       rabitEnv: java.util.Map[String, String],
       checkpointRound: Int,
       prevBooster: Booster,
-      evalSetsMap: Map[String, RDD[XGBLabeledPoint]]): RDD[(Booster, Map[String, Array[Float]])] = {
+      evalSetsMap: Map[String, RDD[XGBLabeledPoint]]):
+          RDD[Option[(Booster, Map[String, Array[Float]])]] = {
     if (evalSetsMap.isEmpty) {
       trainingData.mapPartitions(labeledPointGroups => {
         val watches = Watches.buildWatchesWithGroup(xgbExecutionParam,
@@ -508,7 +525,10 @@ object XGBoost extends Serializable {
         xgbExecParams.checkpointParam.checkpointInterval,
         xgbExecParams.round).map {
         checkpointRound: Int =>
-          val tracker = startTracker(xgbExecParams.numWorkers, xgbExecParams.trackerConf)
+          // Compute number of active workers
+          val numActiveWorkers =
+            xgbExecParams.numWorkers/sc.getConf.getInt("spark.executor.cores", 1)
+          val tracker = startTracker(numActiveWorkers, xgbExecParams.trackerConf)
           try {
             val parallelismTracker = new SparkParallelismTracker(sc,
               xgbExecParams.timeoutRequestWorkers,
@@ -634,7 +654,7 @@ object XGBoost extends Serializable {
 
   private def postTrackerReturnProcessing(
       trackerReturnVal: Int,
-      distributedBoostersAndMetrics: RDD[(Booster, Map[String, Array[Float]])],
+      distributedBoostersAndMetrics: RDD[Option[(Booster, Map[String, Array[Float]])]],
       sparkJobThread: Thread): (Booster, Map[String, Array[Float]]) = {
     if (trackerReturnVal == 0) {
       // Copies of the final booster and the corresponding metrics
@@ -643,7 +663,9 @@ object XGBoost extends Serializable {
       // it's safe to block here forever, as the tracker has returned successfully, and the Spark
       // job should have finished, there is no reason for the thread cannot return
       sparkJobThread.join()
-      val (booster, metrics) = distributedBoostersAndMetrics.first()
+      val (booster, metrics) = distributedBoostersAndMetrics
+        .filter(value => value.isDefined)
+        .first().get
       distributedBoostersAndMetrics.unpersist(false)
       (booster, metrics)
     } else {

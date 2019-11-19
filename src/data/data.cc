@@ -6,6 +6,7 @@
 #include <xgboost/logging.h>
 #include <dmlc/registry.h>
 #include <cstring>
+#include <mutex>
 
 #include "./sparse_page_writer.h"
 #include "./simple_dmatrix.h"
@@ -277,21 +278,27 @@ DMatrix* DMatrix::Create(dmlc::Parser<uint32_t>* parser,
   }
 }
 
+std::mutex dMatMutex;
+
 DMatrix* DMatrix::CreateOrMerge(dmlc::Parser<uint32_t>* parser,
                                 const size_t page_size) {
+  std::unique_ptr<data::SimpleCSRSource> source(new data::SimpleCSRSource());
+  std::lock_guard<std::mutex> lg(dMatMutex);
+
   if (!bigDMat_) {
-    std::unique_ptr<data::SimpleCSRSource> source(new data::SimpleCSRSource());
     source->CopyFrom(parser);
     bigDMat_ =  DMatrix::Create(std::move(source));
     return bigDMat_;
   } else {
-      data::SimpleDMatrix* psdm = dynamic_cast<data::SimpleDMatrix*>(bigDMat_);
+    data::SimpleDMatrix* psdm = dynamic_cast<data::SimpleDMatrix*>(bigDMat_);
     if (!psdm) {
       LOG(FATAL) << "Runtime error";
+      return nullptr;
     } else {
-      psdm->AddFrom(parser);
+      psdm->AddDataFromParser(parser);
+      // return an empty DMatrix
+      return DMatrix::Create(std::move(source));
     }
-    return nullptr;
   }
 }
 

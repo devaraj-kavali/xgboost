@@ -17,7 +17,6 @@
 package ml.dmlc.xgboost4j.scala.example.spark
 
 import ml.dmlc.xgboost4j.{LabeledPoint => XGBLabeledPoint}
-import ml.dmlc.xgboost4j.scala.DataSource
 import ml.dmlc.xgboost4j.scala.DMatrix
 import ml.dmlc.xgboost4j.scala.spark.XGBoostClassifier
 
@@ -72,19 +71,6 @@ object MortgageTraining {
     }.cache()
   }
 
-  def convertDFToDataSourceRDD(dataFrame: DataFrame, nPartitions: Int): RDD[DataSource] = {
-    val df = dataFrame.coalesce(nPartitions)
-    val selectedColumns = Seq(col("delinquency_12").cast(FloatType), col("features"))
-    val xgblpRDD = df.select(selectedColumns: _*).rdd.map {
-      case Row(label: Float, features: Vector) =>
-        val values = features.toDense.values.map(_.toFloat)
-        XGBLabeledPoint(label, null, values, 1.0f, baseMargin = Float.NaN)
-    }
-    xgblpRDD.mapPartitions {
-      pts => Iterator(new DataSource(pts))
-    }.cache()
-  }
-
   def main(args: Array[String]): Unit = {
     if (args.length < 1) {
       // scalastyle:off
@@ -124,6 +110,7 @@ object MortgageTraining {
     // val xgbClassifier = new XGBoostClassifier(xgbParam)
     // val xgbClassificationModel = xgbClassifier.fit(xgbInput)
     val tables = convertDFToDMatrixRDD(df, nExecutors*nExecutorCores)
+    println(s"number of DMatrix = ${tables.count}")
     val merged = tables
       // .coalesce(nExecutors)
       .mapPartitions(matrices => {

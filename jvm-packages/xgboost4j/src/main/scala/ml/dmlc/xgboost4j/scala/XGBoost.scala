@@ -55,7 +55,6 @@ object XGBoost {
       eval: EvalTrait = null,
       earlyStoppingRound: Int = 0,
       booster: Booster = null): Booster = {
-    /*
     val jWatches = watches.mapValues(_.jDMatrix).asJava
     val jBooster = if (booster == null) {
       null
@@ -73,8 +72,9 @@ object XGBoost {
       // Avoid creating a new SBooster with the same JBooster
       booster
     }
-    */
+    /*
     booster
+    */
   }
 
   /**
