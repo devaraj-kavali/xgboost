@@ -6,7 +6,6 @@
 #include <xgboost/logging.h>
 #include <dmlc/registry.h>
 #include <cstring>
-#include <mutex>
 
 #include "./sparse_page_writer.h"
 #include "./simple_dmatrix.h"
@@ -151,9 +150,6 @@ void MetaInfo::SetInfo(const char * c_key, std::string const& interface_str) {
 }
 #endif  // !defined(XGBOOST_USE_CUDA)
 
-// define class SDM
-DMatrix* DMatrix::bigDMat_ = nullptr;
-
 DMatrix* DMatrix::Load(const std::string& uri,
                        bool silent,
                        bool load_row_split,
@@ -278,27 +274,16 @@ DMatrix* DMatrix::Create(dmlc::Parser<uint32_t>* parser,
   }
 }
 
-std::mutex dMatMutex;
-
-DMatrix* DMatrix::CreateOrMerge(dmlc::Parser<uint32_t>* parser,
-                                const size_t page_size) {
+DMatrix* DMatrix::CreateOrMerge(dmlc::Parser<uint32_t>* parser, int numBatches) {
+  data::BatchedDMatrix* batched = data::BatchedDMatrix::getBatchedDMatrix(numBatches);
   std::unique_ptr<data::SimpleCSRSource> source(new data::SimpleCSRSource());
-  std::lock_guard<std::mutex> lg(dMatMutex);
-
-  if (!bigDMat_) {
-    source->CopyFrom(parser);
-    bigDMat_ =  DMatrix::Create(std::move(source));
-    return bigDMat_;
+  source->CopyFrom(parser);
+  if (batched->AddBatch(std::move(source))) {
+    // std::cout << "num rows = " << batched->GetNumRows() << "\n";
+    return batched;
   } else {
-    data::SimpleDMatrix* psdm = dynamic_cast<data::SimpleDMatrix*>(bigDMat_);
-    if (!psdm) {
-      LOG(FATAL) << "Runtime error";
-      return nullptr;
-    } else {
-      psdm->AddDataFromParser(parser);
-      // return an empty DMatrix
-      return DMatrix::Create(std::move(source));
-    }
+    std::unique_ptr<data::SimpleCSRSource> mpt(new data::SimpleCSRSource());
+    return new data::SimpleDMatrix(std::move(mpt));
   }
 }
 

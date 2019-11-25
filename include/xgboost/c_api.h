@@ -123,6 +123,7 @@ XGB_DLL int XGDMatrixCreateFromFile(const char *fname,
  */
 XGB_DLL int XGDMatrixCreateByMergingDataIters(
     DataIterHandle data_handle,
+    int numBatches,
     XGBCallbackDataIterNext* callback,
     DMatrixHandle *out);
 

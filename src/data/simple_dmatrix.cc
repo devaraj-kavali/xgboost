@@ -73,5 +73,105 @@ BatchSet<EllpackPage> SimpleDMatrix::GetEllpackBatches() {
 }
 
 bool SimpleDMatrix::SingleColBlock() const { return true; }
+
+// static members
+BatchedDMatrix* BatchedDMatrix::newMat_{nullptr};
+std::mutex BatchedDMatrix::batchMutex_;
+std::condition_variable BatchedDMatrix::batchBuiltCondVar_;
+BatchedDMatrix* BatchedDMatrix::getBatchedDMatrix(int numBatches) {
+  std::lock_guard<std::mutex> lg(batchMutex_);
+  if (!newMat_) {
+    newMat_ = new BatchedDMatrix(numBatches);
+  }
+  return newMat_;
+}
+
+void BatchedDMatrix::CreateInfo() {
+  info_->Clear();
+  for (const auto& src : sources_) {
+    // labels
+    auto& src_labels = src->info.labels_.HostVector();
+    auto& labels = info_->labels_.HostVector();
+    labels.insert(labels.end(), src_labels.begin(), src_labels.end());
+    // weights
+    auto& src_weights = src->info.weights_.HostVector();
+    auto& weights = info_->weights_.HostVector();
+    weights.insert(weights.end(), src_weights.begin(), src_weights.end());
+    // group_ptr
+    auto& src_gptr = src->info.group_ptr_;
+    auto& gptr = info_->group_ptr_;
+    gptr.insert(gptr.end(), src_gptr.begin(), src_gptr.end());
+    // num_row
+    info_->num_row_ += src->info.num_row_;
+    // num_col
+    if (info_->num_col_ == 0) {
+      info_->num_col_ = src->info.num_col_;
+    } else {
+      CHECK_EQ(info_->num_col_, src->info.num_col_) << "invalid data, num_col mismatch";
+    }
+    // num_nonzero
+    info_->num_nonzero_ += src->info.num_nonzero_;
+  }
+}
+
+MetaInfo& BatchedDMatrix::Info() { 
+  return *info_;
+}
+
+const MetaInfo& BatchedDMatrix::Info() const { 
+  return *info_;
+}
+
+bool BatchedDMatrix::AddBatch(std::unique_ptr<SimpleCSRSource>&& batch) {
+  std::unique_lock<std::mutex> ul(batchMutex_);
+  sources_.push_front(std::move(batch));
+  if (++nSources_ == nBatches_) {
+    CreateInfo();
+    newMat_ = nullptr;
+    // notify all
+    batchBuiltCondVar_.notify_all();
+    return true;
+  } else {
+    // this thread doesn't continue until notified
+    batchBuiltCondVar_.wait(ul);
+    return false;
+  }
+}
+
+float BatchedDMatrix::GetColDensity(size_t cidx) {
+  // for now, assuming BatchedDMatrix is always dense
+  return 1.0f;
+}
+
+BatchSet<SparsePage> BatchedDMatrix::GetRowBatches() {
+  std::lock_guard<std::mutex> lg(batchMutex_);
+  auto begin_iter = BatchIterator<SparsePage>(new BatchSetIteratorImpl(sources_));
+  return BatchSet<SparsePage>(begin_iter);
+}
+
+BatchSet<CSCPage> BatchedDMatrix::GetColumnBatches() {
+  LOG(FATAL) << "method not implemented";
+}
+
+BatchSet<SortedCSCPage> BatchedDMatrix::GetSortedColumnBatches() {
+  LOG(FATAL) << "method not implemented";
+}
+
+BatchSet<EllpackPage> BatchedDMatrix::GetEllpackBatches() {
+  LOG(FATAL) << "method not implemented";
+}
+
+bool BatchedDMatrix::SingleColBlock() const { return true; }
+
+size_t BatchedDMatrix::GetNumRows() {
+  size_t nrows = 0;
+  auto batches = GetRowBatches();
+  for (const auto& batch : batches) {
+    // std::cout << "batch size = " << batch.Size() << "\n";
+    nrows += batch.Size();
+  }
+  return nrows;
+}
+
 }  // namespace data
 }  // namespace xgboost

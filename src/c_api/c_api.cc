@@ -175,12 +175,13 @@ int XGDMatrixCreateFromFile(const char *fname,
 
 int XGDMatrixCreateByMergingDataIters(
     void* data_handle,
+    int numBatches,
     XGBCallbackDataIterNext* callback,
     DMatrixHandle *out) {
   API_BEGIN();
 
   NativeDataIter parser(data_handle, callback);
-  *out = new std::shared_ptr<DMatrix>(DMatrix::CreateOrMerge(&parser));
+  *out = new std::shared_ptr<DMatrix>(DMatrix::CreateOrMerge(&parser, numBatches));
   API_END();
 }
 

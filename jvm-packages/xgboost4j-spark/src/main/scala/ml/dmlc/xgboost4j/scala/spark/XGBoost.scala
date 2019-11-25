@@ -422,13 +422,13 @@ object XGBoost extends Serializable {
       rabitEnv: java.util.Map[String, String],
       checkpointRound: Int,
       prevBooster: Booster,
-      evalSetsMap: Map[String, RDD[XGBLabeledPoint]]):
-          RDD[Option[(Booster, Map[String, Array[Float]])]] = {
+      evalSetsMap: Map[String, RDD[XGBLabeledPoint]],
+      numBatches: Int): RDD[Option[(Booster, Map[String, Array[Float]])]] = {
     if (evalSetsMap.isEmpty) {
       trainingData.mapPartitions(labeledPoints => {
         val watches = Watches.buildWatches(xgbExecutionParams,
           processMissingValues(labeledPoints, xgbExecutionParams.missing),
-          getCacheDirName(xgbExecutionParams.useExternalMemory))
+          getCacheDirName(xgbExecutionParams.useExternalMemory), numBatches)
         buildDistributedBooster(watches, xgbExecutionParams, rabitEnv, checkpointRound,
           xgbExecutionParams.obj, xgbExecutionParams.eval, prevBooster)
       }).cache()
@@ -441,7 +441,7 @@ object XGBoost extends Serializable {
                 case (name, iter) => (name, processMissingValues(iter,
                   xgbExecutionParams.missing))
               },
-              getCacheDirName(xgbExecutionParams.useExternalMemory))
+              getCacheDirName(xgbExecutionParams.useExternalMemory), numBatches)
             buildDistributedBooster(watches, xgbExecutionParams, rabitEnv, checkpointRound,
               xgbExecutionParams.obj, xgbExecutionParams.eval, prevBooster)
         }.cache()
@@ -454,13 +454,13 @@ object XGBoost extends Serializable {
       rabitEnv: java.util.Map[String, String],
       checkpointRound: Int,
       prevBooster: Booster,
-      evalSetsMap: Map[String, RDD[XGBLabeledPoint]]):
-          RDD[Option[(Booster, Map[String, Array[Float]])]] = {
+      evalSetsMap: Map[String, RDD[XGBLabeledPoint]],
+      numBatches: Int): RDD[Option[(Booster, Map[String, Array[Float]])]] = {
     if (evalSetsMap.isEmpty) {
       trainingData.mapPartitions(labeledPointGroups => {
         val watches = Watches.buildWatchesWithGroup(xgbExecutionParam,
           processMissingValuesWithGroup(labeledPointGroups, xgbExecutionParam.missing),
-          getCacheDirName(xgbExecutionParam.useExternalMemory))
+          getCacheDirName(xgbExecutionParam.useExternalMemory), numBatches)
         buildDistributedBooster(watches, xgbExecutionParam, rabitEnv, checkpointRound,
           xgbExecutionParam.obj, xgbExecutionParam.eval, prevBooster)
       }).cache()
@@ -472,7 +472,7 @@ object XGBoost extends Serializable {
               case (name, iter) => (name, processMissingValuesWithGroup(iter,
                 xgbExecutionParam.missing))
             },
-            getCacheDirName(xgbExecutionParam.useExternalMemory))
+            getCacheDirName(xgbExecutionParam.useExternalMemory), numBatches)
           buildDistributedBooster(watches, xgbExecutionParam, rabitEnv, checkpointRound,
             xgbExecutionParam.obj,
             xgbExecutionParam.eval,
@@ -536,10 +536,12 @@ object XGBoost extends Serializable {
             val rabitEnv = tracker.getWorkerEnvs
             val boostersAndMetrics = if (hasGroup) {
               trainForRanking(transformedTrainingData.left.get, xgbExecParams, rabitEnv,
-                checkpointRound, prevBooster, evalSetsMap)
+                checkpointRound, prevBooster, evalSetsMap,
+                xgbExecParams.numWorkers/numActiveWorkers)
             } else {
               trainForNonRanking(transformedTrainingData.right.get, xgbExecParams, rabitEnv,
-                checkpointRound, prevBooster, evalSetsMap)
+                checkpointRound, prevBooster, evalSetsMap,
+                xgbExecParams.numWorkers/numActiveWorkers)
             }
             val sparkJobThread = new Thread() {
               override def run() {
@@ -732,7 +734,8 @@ private object Watches {
 
   def buildWatches(
       nameAndLabeledPointSets: Iterator[(String, Iterator[XGBLabeledPoint])],
-      cachedDirName: Option[String]): Watches = {
+      cachedDirName: Option[String],
+      numBatches: Int): Watches = {
     val dms = nameAndLabeledPointSets.map {
       case (name, labeledPoints) =>
         val baseMargins = new mutable.ArrayBuilder.ofFloat
@@ -740,7 +743,8 @@ private object Watches {
           baseMargins += labeledPoint.baseMargin
           labeledPoint
         })
-        val dMatrix = new DMatrix(duplicatedItr, cachedDirName.map(_ + s"/$name").orNull)
+        val dMatrix = new DMatrix(duplicatedItr,
+                                  cachedDirName.map(_ + s"/$name").orNull, numBatches)
         val baseMargin = fromBaseMarginsToArray(baseMargins.result().iterator)
         if (baseMargin.isDefined) {
           dMatrix.setBaseMargin(baseMargin.get)
@@ -753,7 +757,8 @@ private object Watches {
   def buildWatches(
       xgbExecutionParams: XGBoostExecutionParams,
       labeledPoints: Iterator[XGBLabeledPoint],
-      cacheDirName: Option[String]): Watches = {
+      cacheDirName: Option[String],
+      numBatches: Int): Watches = {
     val trainTestRatio = xgbExecutionParams.xgbInputParams.trainTestRatio
     val seed = xgbExecutionParams.xgbInputParams.seed
     val r = new Random(seed)
@@ -770,8 +775,10 @@ private object Watches {
       }
       accepted
     }
-    val trainMatrix = new DMatrix(trainPoints, cacheDirName.map(_ + "/train").orNull)
-    val testMatrix = new DMatrix(testPoints.iterator, cacheDirName.map(_ + "/test").orNull)
+    val trainMatrix = new DMatrix(trainPoints,
+                                  cacheDirName.map(_ + "/train").orNull, numBatches)
+    val testMatrix = new DMatrix(testPoints.iterator,
+                                  cacheDirName.map(_ + "/test").orNull, numBatches)
 
     val trainMargin = fromBaseMarginsToArray(trainBaseMargins.result().iterator)
     val testMargin = fromBaseMarginsToArray(testBaseMargins.result().iterator)
@@ -783,7 +790,8 @@ private object Watches {
 
   def buildWatchesWithGroup(
       nameAndlabeledPointGroupSets: Iterator[(String, Iterator[Array[XGBLabeledPoint]])],
-      cachedDirName: Option[String]): Watches = {
+      cachedDirName: Option[String],
+      numBatches: Int): Watches = {
     val dms = nameAndlabeledPointGroupSets.map {
       case (name, labeledPointsGroups) =>
         val baseMargins = new mutable.ArrayBuilder.ofFloat
@@ -808,7 +816,8 @@ private object Watches {
           groupsInfo += groupSize
           true
         })
-        val dMatrix = new DMatrix(iter.flatMap(_.iterator), cachedDirName.map(_ + s"/$name").orNull)
+        val dMatrix = new DMatrix(iter.flatMap(_.iterator),
+                                  cachedDirName.map(_ + s"/$name").orNull, numBatches)
         val baseMargin = fromBaseMarginsToArray(baseMargins.result().iterator)
         if (baseMargin.isDefined) {
           dMatrix.setBaseMargin(baseMargin.get)
@@ -823,7 +832,8 @@ private object Watches {
   def buildWatchesWithGroup(
       xgbExecutionParams: XGBoostExecutionParams,
       labeledPointGroups: Iterator[Array[XGBLabeledPoint]],
-      cacheDirName: Option[String]): Watches = {
+      cacheDirName: Option[String],
+      numBatches: Int): Watches = {
     val trainTestRatio = xgbExecutionParams.xgbInputParams.trainTestRatio
     val seed = xgbExecutionParams.xgbInputParams.seed
     val r = new Random(seed)
@@ -875,11 +885,13 @@ private object Watches {
     }
 
     val trainPoints = trainLabelPointGroups.flatMap(_.iterator)
-    val trainMatrix = new DMatrix(trainPoints, cacheDirName.map(_ + "/train").orNull)
+    val trainMatrix = new DMatrix(trainPoints,
+                                  cacheDirName.map(_ + "/train").orNull, numBatches)
     trainMatrix.setGroup(trainGroups.result())
     trainMatrix.setWeight(trainWeights.result())
 
-    val testMatrix = new DMatrix(testPoints.result().iterator, cacheDirName.map(_ + "/test").orNull)
+    val testMatrix = new DMatrix(testPoints.result().iterator,
+                                  cacheDirName.map(_ + "/test").orNull, numBatches)
     if (trainTestRatio < 1.0) {
       testMatrix.setGroup(testGroups.result())
       testMatrix.setWeight(testWeights.result())

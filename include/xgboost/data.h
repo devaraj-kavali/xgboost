@@ -461,8 +461,7 @@ class DMatrix {
                          const std::string& cache_prefix = "",
                          size_t page_size = kPageSize);
 
-  static DMatrix* CreateOrMerge(dmlc::Parser<uint32_t>* parser,
-                         size_t page_size = kPageSize);
+  static DMatrix* CreateOrMerge(dmlc::Parser<uint32_t>* parser, int numBatches);
 
   /*! \brief page size 32 MB */
   static const size_t kPageSize = 32UL << 20UL;
@@ -472,8 +471,6 @@ class DMatrix {
   virtual BatchSet<CSCPage> GetColumnBatches() = 0;
   virtual BatchSet<SortedCSCPage> GetSortedColumnBatches() = 0;
   virtual BatchSet<EllpackPage> GetEllpackBatches() = 0;
-
-  static DMatrix* bigDMat_;
 };
 
 template<>

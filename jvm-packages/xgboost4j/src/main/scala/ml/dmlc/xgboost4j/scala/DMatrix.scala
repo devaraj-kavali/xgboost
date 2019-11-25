@@ -38,8 +38,8 @@ class DMatrix private[scala](private[scala] val jDMatrix: JDMatrix) {
     * @param cacheInfo  Cache path information, used for external memory setting, null by default.
     * @throws XGBoostError native error
     */
-  def this(dataIter: Iterator[LabeledPoint], cacheInfo: String = null) {
-    this(new JDMatrix(dataIter.asJava, cacheInfo))
+  def this(dataIter: Iterator[LabeledPoint], cacheInfo: String = null, numBatches: Int = 1) {
+    this(new JDMatrix(dataIter.asJava, cacheInfo, numBatches))
   }
 
   /**

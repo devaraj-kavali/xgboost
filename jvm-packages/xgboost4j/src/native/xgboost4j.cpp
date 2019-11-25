@@ -166,13 +166,13 @@ JNIEXPORT jstring JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGBGetLastError
 /*
  * Class:     ml_dmlc_xgboost4j_java_XGBoostJNI
  * Method:    XGDMatrixCreateByMergingDataIters
- * Signature: (Ljava/util/Iterator;[J)I
+ * Signature: (Ljava/util/Iterator;I[J)I
  */
 JNIEXPORT jint JNICALL Java_ml_dmlc_xgboost4j_java_XGBoostJNI_XGDMatrixCreateByMergingDataIters
-  (JNIEnv *jenv, jclass jcls, jobject jiter, jlongArray jout) {
+  (JNIEnv *jenv, jclass jcls, jobject jiter, jint n, jlongArray jout) {
   DMatrixHandle result;
   int ret = XGDMatrixCreateByMergingDataIters(
-      jiter, XGBoost4jCallbackDataIterNext, &result);
+      jiter, n, XGBoost4jCallbackDataIterNext, &result);
   setHandle(jenv, jout, result);
   return ret;
 }
