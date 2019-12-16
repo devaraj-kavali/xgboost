@@ -25,7 +25,7 @@ class BaseLogger {
  public:
   BaseLogger() {
 #if XGBOOST_LOG_WITH_TIME
-    log_stream_ << "[" << dmlc::DateLogger().HumanDate() << "] ";
+    //log_stream_ << "[" << dmlc::DateLogger().HumanDate() << "] ";
 #endif  // XGBOOST_LOG_WITH_TIME
   }
   std::ostream& stream() { return log_stream_; }  // NOLINT
@@ -123,7 +123,7 @@ using LogCallbackRegistryStore = dmlc::ThreadLocalStore<LogCallbackRegistry>;
 #define LOG_WARNING                                                            \
   if (::xgboost::ConsoleLogger::ShouldLog(                                     \
           ::xgboost::ConsoleLogger::LV::kWarning))                             \
-  ::xgboost::ConsoleLogger(__FILE__, __LINE__,                                 \
+  ::xgboost::ConsoleLogger("", __LINE__,                                 \
                            ::xgboost::ConsoleLogger::LogVerbosity::kWarning)
 
 // Redefines LOG_INFO for controling verbosity
@@ -133,7 +133,7 @@ using LogCallbackRegistryStore = dmlc::ThreadLocalStore<LogCallbackRegistry>;
 #define LOG_INFO                                                               \
   if (::xgboost::ConsoleLogger::ShouldLog(                                     \
           ::xgboost::ConsoleLogger::LV::kInfo))                                \
-  ::xgboost::ConsoleLogger(__FILE__, __LINE__,                                 \
+  ::xgboost::ConsoleLogger("", __LINE__,                                 \
                            ::xgboost::ConsoleLogger::LogVerbosity::kInfo)
 
 #if defined(LOG_DEBUG)
@@ -142,7 +142,7 @@ using LogCallbackRegistryStore = dmlc::ThreadLocalStore<LogCallbackRegistry>;
 #define LOG_DEBUG                                                              \
   if (::xgboost::ConsoleLogger::ShouldLog(                                     \
           ::xgboost::ConsoleLogger::LV::kDebug))                               \
-  ::xgboost::ConsoleLogger(__FILE__, __LINE__,                                 \
+  ::xgboost::ConsoleLogger("", __LINE__,                                 \
                            ::xgboost::ConsoleLogger::LogVerbosity::kDebug)
 
 // redefines the logging macro if not existed
@@ -160,7 +160,7 @@ using LogCallbackRegistryStore = dmlc::ThreadLocalStore<LogCallbackRegistry>;
 #undef CHECK
 #define CHECK(cond)                                     \
   if (XGBOOST_EXPECT(!(cond), false))                   \
-    dmlc::LogMessageFatal(__FILE__, __LINE__).stream()  \
+    dmlc::LogMessageFatal("", __LINE__).stream()  \
         << "Check failed: " #cond << ": "
 #endif  // defined(CHECK)
 

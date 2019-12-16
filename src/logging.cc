@@ -89,7 +89,7 @@ ConsoleLogger::ConsoleLogger(LogVerbosity cur_verb) :
 
 ConsoleLogger::ConsoleLogger(
     const std::string& file, int line, LogVerbosity cur_verb) {
-  cur_verbosity_ = cur_verb;
+  /*cur_verbosity_ = cur_verb;
   switch (cur_verbosity_) {
     case LogVerbosity::kWarning:
       BaseLogger::log_stream_ << "WARNING: "
@@ -108,7 +108,7 @@ ConsoleLogger::ConsoleLogger(
       break;
     case LogVerbosity::kSilent:
       break;
-  }
+  }*/
 }
 
 }  // namespace xgboost
