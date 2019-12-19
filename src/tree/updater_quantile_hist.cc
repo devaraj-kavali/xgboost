@@ -41,6 +41,10 @@ void QuantileHistMaker::Configure(const Args& args) {
   param_.InitAllowUnknown(args);
   is_gmat_initialized_ = false;
 
+  std::cout << "parameters" << std::endl;
+  dmlc::JSONWriter json(&std::cout);
+  param_.Save(&json);
+
   // initialize the split evaluator
   if (!spliteval_) {
     spliteval_.reset(SplitEvaluator::Create(param_.split_evaluator));
@@ -722,10 +726,12 @@ void QuantileHistMaker::Builder::ExpandWithDepthWise(
   unsigned timestamp = 0;
   int num_leaves = 0;
 
+
   // in depth_wise growing, we feed loss_chg with 0.0 since it is not used anyway
   qexpand_depth_wise_.emplace_back(0, -1, ROOT_PARENT_ID, p_tree->GetDepth(0), 0.0, timestamp++);
   ++num_leaves;
 
+  //std::cout << "ExpandWithDepthWise max_depth " <<  param_.max_depth << std::endl;
   for (int depth = 0; depth < param_.max_depth + 1; depth++) {
     std::vector<ExpandEntry> temp_qexpand_depth;
 
@@ -765,10 +771,13 @@ void QuantileHistMaker::Builder::ExpandWithLossGuide(
     const std::vector<GradientPair>& gpair_h) {
   unsigned timestamp = 0;
   int num_leaves = 0;
+  
+  double tstart=dmlc::GetTime();
 
   std::vector<std::vector<common::GradStatHist::GradType*>> hist_buffers;
   std::vector<std::vector<uint8_t>> hist_is_init;
 
+//  std::cout << "ExpandWithLossGuide num_roots " <<  p_tree->param.num_roots << std::endl;
   for (int nid = 0; nid < p_tree->param.num_roots; ++nid) {
     std::vector<ExpandEntry> nodes_to_build{ExpandEntry(
         0, -1, ROOT_PARENT_ID, p_tree->GetDepth(0), 0.0, timestamp++)};
@@ -811,6 +820,7 @@ void QuantileHistMaker::Builder::ExpandWithLossGuide(
       ++num_leaves;  // give two and take one, as parent is no longer a leaf
     }
   }
+  std::cout << "\nExpandWithLossGuide " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
 }
 
 void QuantileHistMaker::Builder::Update(const GHistIndexMatrix& gmat,
@@ -824,9 +834,9 @@ void QuantileHistMaker::Builder::Update(const GHistIndexMatrix& gmat,
   const std::vector<GradientPair>& gpair_h = gpair->ConstHostVector();
   spliteval_->Reset();
 
-  perf_monitor.TickStart();
+  //perf_monitor.TickStart();
   this->InitData(gmat, gpair_h, *p_fmat, *p_tree);
-  perf_monitor.UpdatePerfTimer(TreeGrowingPerfMonitor::timer_name::INIT_DATA);
+  //perf_monitor.UpdatePerfTimer(TreeGrowingPerfMonitor::timer_name::INIT_DATA);
 
   if (param_.grow_policy == TrainParam::kLossGuide) {
     ExpandWithLossGuide(gmat, gmatb, column_matrix, p_fmat, p_tree, gpair_h);
@@ -841,7 +851,9 @@ void QuantileHistMaker::Builder::Update(const GHistIndexMatrix& gmat,
       static_cast<common::GradStatHist::GradType>(snode_[nid].stats.sum_hess);
   }
 
+  perf_monitor.TickStart();
   pruner_->Update(gpair, p_fmat, std::vector<RegTree*>{p_tree});
+  perf_monitor.UpdatePerfTimer(TreeGrowingPerfMonitor::timer_name::INIT_DATA);
 
   perf_monitor.EndPerfMonitor();
 }

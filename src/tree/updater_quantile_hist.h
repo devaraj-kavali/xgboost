@@ -144,6 +144,7 @@ class QuantileHistMaker: public TreeUpdater {
       }
 
       inline void EndPerfMonitor() {
+      //  std::cout << "\nperfmon " << std::fixed << rabit::GetRank() << " " << global_start << " " << dmlc::GetTime() - global_start << " xgbtck" << std::endl;
       /*  CHECK_GT(global_start, 0);
         double total_time = dmlc::GetTime() - global_start;
         LOG(INFO) << "\nrank " << rabit::GetRank()  
@@ -188,23 +189,23 @@ class QuantileHistMaker: public TreeUpdater {
         switch (timer_name) {
           case INIT_DATA:
             //time_init_data += dmlc::GetTime() - tstart;
-            LOG(INFO) << "\ninit_data " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck" << std::endl;
+            std::cout << "\npruner_update " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck" << std::endl;
             break;
           case INIT_NEW_NODE:
             //time_init_new_node += dmlc::GetTime() - tstart;
-            LOG(INFO) << "\ninit_node " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
+            //LOG(INFO) << "\ninit_node " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
             break;
           case BUILD_HIST:
             //time_build_hist += dmlc::GetTime() - tstart;
-            LOG(INFO) << "\nbuild_hist " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
+            std::cout << "\nbuild_hist " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
             break;
           case EVALUATE_SPLIT:
             //time_evaluate_split += dmlc::GetTime() - tstart;
-            LOG(INFO) << "\neval_split " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
+            //LOG(INFO) << "\neval_split " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
             break;
           case APPLY_SPLIT:
             //time_apply_split += dmlc::GetTime() - tstart;
-            LOG(INFO) << "\napply " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
+            std::cout << "\napply " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
             break;
         }
         tstart = -1;

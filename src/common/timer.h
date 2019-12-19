@@ -9,6 +9,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <rabit/rabit.h>
 
 #if defined(XGBOOST_USE_NVTX) && defined(__CUDACC__)
 #include <nvToolsExt.h>
@@ -31,7 +32,7 @@ struct Timer {
     Start();
   }
   void Start() { start = ClockT::now(); }
-  void Stop() { elapsed += ClockT::now() - start; }
+  void Stop() { elapsed = ClockT::now() - start; }
   double ElapsedSeconds() const { return SecondsT(elapsed).count(); }
   void PrintElapsed(std::string label) {
     char buffer[255];
@@ -90,10 +91,12 @@ struct Monitor {
     }
   }
   void Stop(const std::string &name) {
+    using SecondsT = std::chrono::duration<double>;
     if (ConsoleLogger::ShouldLog(ConsoleLogger::LV::kDebug)) {
       auto &stats = statistics_map[name];
       stats.timer.Stop();
       stats.count++;
+      LOG(CONSOLE) << "\n " << name << " " << std::fixed << rabit::GetRank() << " " << std::chrono::duration<double>(stats.timer.start.time_since_epoch()).count()  << " " << SecondsT(stats.timer.elapsed).count() << " xgbtck" << std::endl;
     }
   }
   void StartCuda(const std::string &name) {
