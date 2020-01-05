@@ -766,6 +766,8 @@ void QuantileHistMaker::Builder::ExpandWithLossGuide(
   unsigned timestamp = 0;
   int num_leaves = 0;
 
+  double tstart=dmlc::GetTime();
+
   std::vector<std::vector<common::GradStatHist::GradType*>> hist_buffers;
   std::vector<std::vector<uint8_t>> hist_is_init;
 
@@ -811,6 +813,8 @@ void QuantileHistMaker::Builder::ExpandWithLossGuide(
       ++num_leaves;  // give two and take one, as parent is no longer a leaf
     }
   }
+
+  std::cout << "\nExpandWithLossGuide " << std::fixed << rabit::GetRank() << " " << tstart << " " << dmlc::GetTime() - tstart << " xgbtck"  << std::endl;
 }
 
 void QuantileHistMaker::Builder::Update(const GHistIndexMatrix& gmat,
@@ -824,9 +828,9 @@ void QuantileHistMaker::Builder::Update(const GHistIndexMatrix& gmat,
   const std::vector<GradientPair>& gpair_h = gpair->ConstHostVector();
   spliteval_->Reset();
 
-  perf_monitor.TickStart();
+  //perf_monitor.TickStart();
   this->InitData(gmat, gpair_h, *p_fmat, *p_tree);
-  perf_monitor.UpdatePerfTimer(TreeGrowingPerfMonitor::timer_name::INIT_DATA);
+  //perf_monitor.UpdatePerfTimer(TreeGrowingPerfMonitor::timer_name::INIT_DATA);
 
   if (param_.grow_policy == TrainParam::kLossGuide) {
     ExpandWithLossGuide(gmat, gmatb, column_matrix, p_fmat, p_tree, gpair_h);
@@ -841,7 +845,9 @@ void QuantileHistMaker::Builder::Update(const GHistIndexMatrix& gmat,
       static_cast<common::GradStatHist::GradType>(snode_[nid].stats.sum_hess);
   }
 
+  perf_monitor.TickStart();
   pruner_->Update(gpair, p_fmat, std::vector<RegTree*>{p_tree});
+  perf_monitor.UpdatePerfTimer(TreeGrowingPerfMonitor::timer_name::INIT_DATA);
 
   perf_monitor.EndPerfMonitor();
 }

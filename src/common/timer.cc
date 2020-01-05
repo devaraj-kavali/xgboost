@@ -20,10 +20,12 @@ void Monitor::Start(std::string const &name) {
 }
 
 void Monitor::Stop(const std::string &name) {
+  using SecondsT = std::chrono::duration<double>;
   if (ConsoleLogger::ShouldLog(ConsoleLogger::LV::kDebug)) {
     auto &stats = statistics_map[name];
     stats.timer.Stop();
     stats.count++;
+    LOG(CONSOLE) << "\n " << name << " " << std::fixed << rabit::GetRank() << " " << SecondsT(stats.timer.start.time_since_epoch()).count()  << " " << SecondsT(stats.timer.elapsed).count() << " xgbtck" << std::endl;
   }
 }
 
