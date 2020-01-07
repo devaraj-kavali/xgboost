@@ -27,7 +27,7 @@ struct Timer {
     Start();
   }
   void Start() { start = ClockT::now(); }
-  void Stop() { elapsed += ClockT::now() - start; }
+  void Stop() { elapsed = ClockT::now() - start; }
   double ElapsedSeconds() const { return SecondsT(elapsed).count(); }
   void PrintElapsed(std::string label) {
     char buffer[255];

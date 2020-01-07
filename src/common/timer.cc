@@ -25,7 +25,7 @@ void Monitor::Stop(const std::string &name) {
     auto &stats = statistics_map[name];
     stats.timer.Stop();
     stats.count++;
-    LOG(CONSOLE) << "\n " << name << " " << std::fixed << rabit::GetRank() << " " << SecondsT(stats.timer.start.time_since_epoch()).count()  << " " << SecondsT(stats.timer.elapsed).count() << " xgbtck" << std::endl;
+    std::cout << "\n " << name << " " << std::fixed << rabit::GetRank() << " " << SecondsT(stats.timer.start.time_since_epoch()).count()  << " " << SecondsT(stats.timer.elapsed).count() << " xgbtck" << std::endl;
   }
 }
 
